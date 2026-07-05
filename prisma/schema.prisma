@@ -1,0 +1,274 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  STUDENT
+}
+
+enum Campus {
+  MAIN
+  ENGINEERING
+  SCIENCE
+  BUSINESS
+  MEDICINE
+  OTHER
+}
+
+enum ItemCondition {
+  NEW
+  LIKE_NEW
+  GOOD
+  FAIR
+  NEEDS_REPAIR
+}
+
+enum ListingType {
+  SALE
+  EXCHANGE
+  DONATION
+  REPAIR_SERVICE
+}
+
+enum ListingStatus {
+  DRAFT
+  PUBLISHED
+  RESERVED
+  COMPLETED
+  ARCHIVED
+  DELETED
+}
+
+enum RepairTicketStatus {
+  OPEN
+  AI_RECOMMENDED
+  IN_PROGRESS
+  RESOLVED
+  CANCELLED
+}
+
+enum TransactionType {
+  SALE
+  EXCHANGE
+  DONATION
+  REPAIR
+}
+
+enum TransactionStatus {
+  REQUESTED
+  ACCEPTED
+  REJECTED
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+enum SustainabilityAction {
+  ITEM_REUSED
+  DEVICE_REPAIRED
+  ITEM_DONATED
+  EXCHANGE_COMPLETED
+}
+
+enum TrustRiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model User {
+  id              String   @id @default(cuid())
+  firstName       String   @db.VarChar(80)
+  lastName        String   @db.VarChar(80)
+  email           String   @unique @db.VarChar(255)
+  passwordHash    String   @db.VarChar(255)
+  imageUrl        String?  @db.VarChar(500)
+  campus          Campus   @default(OTHER)
+  reputationScore Decimal  @default(0) @db.Decimal(5, 2)
+  totalPoints     Int      @default(0)
+  role            UserRole @default(STUDENT)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  listings              Listing[]
+  repairTickets         RepairTicket[]
+  feedbacks             Feedback[]                    @relation("ReviewerFeedback")
+  requestedTransactions MarketplaceTransaction[]      @relation("RequesterTransactions")
+  ownedTransactions     MarketplaceTransaction[]      @relation("OwnerTransactions")
+  trustScoreSnapshots   TrustScoreSnapshot[]
+  recommendationEvents  RecommendationEvent[]
+  impactEvents          SustainabilityImpactEvent[]
+
+  @@index([campus])
+  @@map("users")
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique @db.VarChar(120)
+  slug      String   @unique @db.VarChar(140)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  listings Listing[]
+
+  @@map("categories")
+}
+
+model Listing {
+  id          String        @id @default(cuid())
+  userId      String
+  categoryId  String
+  title       String        @db.VarChar(160)
+  description String
+  condition   ItemCondition
+  listingType ListingType
+  price       Decimal?      @db.Decimal(10, 2)
+  status      ListingStatus @default(PUBLISHED)
+  imageUrl    String?       @db.VarChar(500)
+  location    String        @db.VarChar(160)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  owner                    User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category                 Category                 @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  feedbacks                Feedback[]
+  transactions             MarketplaceTransaction[] @relation("PrimaryListingTransactions")
+  offeredInTransactions    MarketplaceTransaction[] @relation("OfferedListingTransactions")
+  recommendationEvents     RecommendationEvent[]
+  sustainabilityImpactLogs SustainabilityImpactEvent[]
+
+  @@index([userId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([listingType])
+  @@map("listings")
+}
+
+model RepairTicket {
+  id                       String             @id @default(cuid())
+  userId                   String
+  deviceName               String             @db.VarChar(160)
+  problemDescription       String
+  aiRecommendation         String?
+  repairDifficulty         String?            @db.VarChar(40)
+  estimatedRepairCost      Decimal?           @db.Decimal(10, 2)
+  estimatedResaleValue     Decimal?           @db.Decimal(10, 2)
+  estimatedReplacementCost Decimal?           @db.Decimal(10, 2)
+  status                   RepairTicketStatus @default(OPEN)
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@map("repair_tickets")
+}
+
+model Feedback {
+  id         String   @id @default(cuid())
+  listingId  String
+  reviewerId String
+  rating     Int
+  comment    String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  listing  Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  reviewer User    @relation("ReviewerFeedback", fields: [reviewerId], references: [id], onDelete: Cascade)
+
+  @@unique([listingId, reviewerId])
+  @@index([listingId])
+  @@index([reviewerId])
+  @@map("feedback")
+}
+
+model MarketplaceTransaction {
+  id                String            @id @default(cuid())
+  listingId         String
+  requesterId       String
+  ownerId           String
+  offeredListingId  String?
+  transactionType   TransactionType
+  status            TransactionStatus @default(REQUESTED)
+  agreedPrice       Decimal?          @db.Decimal(10, 2)
+  scheduledLocation String?           @db.VarChar(160)
+  completedAt       DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  listing        Listing                     @relation("PrimaryListingTransactions", fields: [listingId], references: [id], onDelete: Cascade)
+  requester      User                        @relation("RequesterTransactions", fields: [requesterId], references: [id], onDelete: Cascade)
+  owner          User                        @relation("OwnerTransactions", fields: [ownerId], references: [id], onDelete: Cascade)
+  offeredListing Listing?                    @relation("OfferedListingTransactions", fields: [offeredListingId], references: [id], onDelete: SetNull)
+  impactEvents   SustainabilityImpactEvent[]
+
+  @@index([listingId])
+  @@index([requesterId])
+  @@index([ownerId])
+  @@index([status])
+  @@map("marketplace_transactions")
+}
+
+model TrustScoreSnapshot {
+  id                     String         @id @default(cuid())
+  userId                 String
+  score                  Decimal        @db.Decimal(5, 2)
+  riskLevel              TrustRiskLevel
+  completedTransactions  Int            @default(0)
+  averageRating          Decimal?       @db.Decimal(3, 2)
+  reportedIssues         Int            @default(0)
+  modelVersion           String         @default("local-v1") @db.VarChar(80)
+  createdAt              DateTime       @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([riskLevel])
+  @@map("trust_score_snapshots")
+}
+
+model RecommendationEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  listingId String
+  reason    String   @db.VarChar(255)
+  clicked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([listingId])
+  @@map("recommendation_events")
+}
+
+model SustainabilityImpactEvent {
+  id               String               @id @default(cuid())
+  userId           String
+  listingId        String?
+  transactionId    String?
+  action           SustainabilityAction
+  co2KgAvoided     Decimal              @default(0) @db.Decimal(10, 2)
+  ewasteKgReduced  Decimal              @default(0) @db.Decimal(10, 2)
+  waterLitersSaved Decimal              @default(0) @db.Decimal(10, 2)
+  moneySaved       Decimal              @default(0) @db.Decimal(10, 2)
+  createdAt        DateTime             @default(now())
+
+  user        User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing     Listing?                @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  transaction MarketplaceTransaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@map("sustainability_impact_events")
+}
+

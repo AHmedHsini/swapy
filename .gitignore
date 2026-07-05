@@ -1,0 +1,19 @@
+.env
+node_modules/
+dist/
+coverage/
+.turbo/
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.log
+*.tsbuildinfo
+.DS_Store
+
+# Local databases/backups
+*.sqlite
+*.sqlite3
+*.db
+
+# Generated Prisma engines can be large in some environments.
+prisma/dev.db
