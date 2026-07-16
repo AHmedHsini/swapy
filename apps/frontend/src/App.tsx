@@ -42,6 +42,21 @@ interface Leader {
   completedTransactions: number;
 }
 
+interface Transaction {
+  id: string;
+  listingId: string;
+  requesterId: string;
+  ownerId: string;
+  transactionType: string;
+  status: string;
+  agreedPrice: number | null;
+  scheduledLocation: string | null;
+  completedAt: string | null;
+  listing: { title: string; price: number | null };
+  requester: { firstName: string; lastName: string };
+  owner: { firstName: string; lastName: string };
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState<'marketplace' | 'repair' | 'sustainability' | 'trust'>('marketplace');
   
@@ -53,6 +68,8 @@ function App() {
     moneySaved: 420.0,
     impactEvents: 14
   });
+
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
 
   // State lists
   const [categories, setCategories] = useState<Category[]>([
@@ -187,6 +204,18 @@ function App() {
       if (resListings.ok) {
         const data = await resListings.json();
         if (data.length > 0) setListings(data);
+      }
+
+      const resLeaders = await fetch('/api/users/leaderboard');
+      if (resLeaders.ok) {
+        const data = await resLeaders.json();
+        if (data.length > 0) setLeaders(data);
+      }
+
+      const resTransactions = await fetch('/api/marketplace/transactions');
+      if (resTransactions.ok) {
+        const data = await resTransactions.json();
+        setTransactions(data);
       }
     } catch (e) {
       console.log("Backend offline or unreachable. Using premium mock data fallback.");
@@ -334,6 +363,56 @@ function App() {
 
     // Reset Form
     setNewTicket({ deviceName: '', problemDescription: '' });
+  };
+
+  const handleRequestTransaction = async (item: Listing) => {
+    try {
+      const response = await fetch('/api/marketplace/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          listingId: item.id,
+          requesterId: 'u1',
+          transactionType: item.listingType,
+          agreedPrice: item.price !== null ? Number(item.price) : undefined,
+          scheduledLocation: item.location
+        })
+      });
+
+      if (response.ok) {
+        const savedTx = await response.json();
+        setTransactions([savedTx, ...transactions]);
+        alert(`Successfully requested "${item.title}"!`);
+        fetchData();
+      } else {
+        const errData = await response.json();
+        alert(`Error: ${errData.error?.message || 'Failed to request transaction'}`);
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Failed to submit request.");
+    }
+  };
+
+  const handleUpdateTransactionStatus = async (id: string, status: string) => {
+    try {
+      const response = await fetch(`/api/marketplace/transactions/${id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+
+      if (response.ok) {
+        alert(`Transaction status updated to ${status.toLowerCase()}!`);
+        fetchData();
+      } else {
+        const errData = await response.json();
+        alert(`Error: ${errData.error?.message || 'Failed to update transaction status'}`);
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Failed to update status.");
+    }
   };
 
   return (
@@ -542,12 +621,81 @@ function App() {
                           </span>
                           <span className="listing-condition">{item.condition.replace('_', ' ')}</span>
                         </div>
+                        {item.userId === 'u1' || item.owner?.firstName === 'Sarah' ? (
+                          <div style={{ marginTop: '0.75rem', fontSize: '0.8rem', color: 'var(--accent-color)', fontWeight: 600, textAlign: 'center' }}>
+                            ✓ Your Listing
+                          </div>
+                        ) : (
+                          <button 
+                            className="submit-btn" 
+                            style={{ marginTop: '0.75rem', padding: '0.45rem 0.75rem', fontSize: '0.8rem', width: '100%' }}
+                            onClick={() => handleRequestTransaction(item)}
+                          >
+                            Request {item.listingType === 'SALE' ? 'to Buy' : item.listingType === 'DONATION' ? 'Donation' : item.listingType === 'EXCHANGE' ? 'Trade' : 'Service'}
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))
                 )}
               </div>
             </div>
+            
+            {transactions.length > 0 && (
+              <div style={{ marginTop: '3rem', borderTop: '1px solid var(--border-color)', paddingTop: '2rem' }}>
+                <h3 style={{ fontFamily: 'Space Grotesk', fontSize: '1.4rem', marginBottom: '1rem', color: 'white', textAlign: 'left' }}>Active Transactions & Deals</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  {transactions.map(tx => {
+                    const isOwner = tx.ownerId === 'u1' || tx.owner?.firstName === 'Sarah';
+                    return (
+                      <div key={tx.id} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '0.75rem', padding: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', textAlign: 'left' }}>
+                        <div>
+                          <h4 style={{ color: 'white', fontFamily: 'Space Grotesk', margin: 0 }}>{tx.listing?.title || 'Marketplace Deal'}</h4>
+                          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '0.25rem 0' }}>
+                            Type: <strong style={{ color: 'white' }}>{tx.transactionType}</strong> | Price: <strong style={{ color: 'white' }}>{tx.agreedPrice ? `$${tx.agreedPrice}` : 'Free/Trade'}</strong> | Location: <strong style={{ color: 'white' }}>{tx.scheduledLocation || 'Not set'}</strong>
+                          </p>
+                          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>
+                            Requester: {tx.requester?.firstName} {tx.requester?.lastName} | Owner: {tx.owner?.firstName} {tx.owner?.lastName}
+                          </p>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                          <span className={`status-badge ${tx.status.toLowerCase()}`}>{tx.status.replace('_', ' ')}</span>
+                          
+                          {tx.status === 'REQUESTED' && isOwner && (
+                            <>
+                              <button 
+                                className="submit-btn" 
+                                style={{ background: 'var(--accent-color)', padding: '0.35rem 0.75rem', fontSize: '0.8rem', margin: 0, width: 'auto' }}
+                                onClick={() => handleUpdateTransactionStatus(tx.id, 'ACCEPTED')}
+                              >
+                                Accept Request
+                              </button>
+                              <button 
+                                className="submit-btn" 
+                                style={{ background: '#ef4444', padding: '0.35rem 0.75rem', fontSize: '0.8rem', margin: 0, width: 'auto' }}
+                                onClick={() => handleUpdateTransactionStatus(tx.id, 'REJECTED')}
+                              >
+                                Reject
+                              </button>
+                            </>
+                          )}
+
+                          {tx.status === 'ACCEPTED' && (
+                            <button 
+                              className="submit-btn" 
+                              style={{ background: 'var(--accent-purple)', padding: '0.35rem 0.75rem', fontSize: '0.8rem', margin: 0, width: 'auto' }}
+                              onClick={() => handleUpdateTransactionStatus(tx.id, 'COMPLETED')}
+                            >
+                              Mark Completed
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

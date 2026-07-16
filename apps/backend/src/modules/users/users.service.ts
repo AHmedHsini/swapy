@@ -46,5 +46,33 @@ export class UsersService {
 
     return toPublicUser(user);
   }
+
+  async getLeaderboard() {
+    const users = await prisma.user.findMany({
+      orderBy: [
+        { totalPoints: "desc" },
+        { reputationScore: "desc" }
+      ],
+      include: {
+        trustScoreSnapshots: {
+          orderBy: { createdAt: "desc" },
+          take: 1
+        }
+      }
+    });
+
+    return users.map((user) => {
+      const latestSnapshot = user.trustScoreSnapshots[0];
+      return {
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        reputationScore: Number(user.reputationScore),
+        totalPoints: user.totalPoints,
+        riskLevel: latestSnapshot ? latestSnapshot.riskLevel : "LOW",
+        completedTransactions: latestSnapshot ? latestSnapshot.completedTransactions : 0
+      };
+    });
+  }
 }
 

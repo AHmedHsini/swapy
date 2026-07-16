@@ -1,4 +1,4 @@
-import { ListingStatus, Prisma } from "@prisma/client";
+import { ListingStatus, Prisma, TransactionStatus, TransactionType, SustainabilityAction } from "@prisma/client";
 
 import { HttpError } from "../../common/http-error.js";
 import { prisma } from "../../config/prisma.js";
@@ -7,7 +7,9 @@ import type {
   CreateFeedbackInput,
   CreateListingInput,
   ListListingsQuery,
-  UpdateListingInput
+  UpdateListingInput,
+  CreateTransactionInput,
+  UpdateTransactionStatusInput
 } from "./marketplace.schemas.js";
 
 function slugify(value: string) {
@@ -145,5 +147,216 @@ export class MarketplaceService {
       throw new HttpError(404, "Category not found");
     }
   }
+
+  async createTransaction(input: CreateTransactionInput) {
+    const listing = await prisma.listing.findUnique({
+      where: { id: input.listingId }
+    });
+
+    if (!listing) {
+      throw new HttpError(404, "Listing not found");
+    }
+
+    if (listing.status !== ListingStatus.PUBLISHED) {
+      throw new HttpError(400, "Listing is not available for transactions");
+    }
+
+    if (listing.userId === input.requesterId) {
+      throw new HttpError(400, "You cannot request a transaction for your own listing");
+    }
+
+    await this.requireUser(input.requesterId);
+
+    if (input.offeredListingId) {
+      const offered = await prisma.listing.findUnique({ where: { id: input.offeredListingId } });
+      if (!offered) {
+        throw new HttpError(404, "Offered listing not found");
+      }
+    }
+
+    return prisma.marketplaceTransaction.create({
+      data: {
+        listingId: input.listingId,
+        requesterId: input.requesterId,
+        ownerId: listing.userId,
+        transactionType: input.transactionType,
+        agreedPrice: input.agreedPrice !== undefined ? new Prisma.Decimal(input.agreedPrice) : null,
+        offeredListingId: input.offeredListingId || null,
+        scheduledLocation: input.scheduledLocation || null,
+        status: TransactionStatus.REQUESTED
+      },
+      include: {
+        listing: { include: { category: true } },
+        requester: true,
+        owner: true
+      }
+    });
+  }
+
+  async getTransaction(id: string) {
+    const transaction = await prisma.marketplaceTransaction.findUnique({
+      where: { id },
+      include: {
+        listing: { include: { category: true } },
+        requester: true,
+        owner: true
+      }
+    });
+
+    if (!transaction) {
+      throw new HttpError(404, "Transaction not found");
+    }
+
+    return transaction;
+  }
+
+  async updateTransactionStatus(id: string, status: TransactionStatus) {
+    const transaction = await this.getTransaction(id);
+
+    if (transaction.status === TransactionStatus.COMPLETED || transaction.status === TransactionStatus.CANCELLED) {
+      throw new HttpError(400, `Cannot update status of a ${transaction.status.toLowerCase()} transaction`);
+    }
+
+    if (status !== TransactionStatus.COMPLETED) {
+      return prisma.marketplaceTransaction.update({
+        where: { id },
+        data: { status },
+        include: {
+          listing: { include: { category: true } },
+          requester: true,
+          owner: true
+        }
+      });
+    }
+
+    // Complete transaction flow
+    const slug = transaction.listing.category.slug;
+    let co2 = new Prisma.Decimal("5.00");
+    let ewaste = new Prisma.Decimal("0.50");
+    let water = new Prisma.Decimal("100.00");
+    let money = transaction.agreedPrice || transaction.listing.price || new Prisma.Decimal("15.00");
+
+    if (slug === "electronics" || slug === "tools-lab") {
+      ewaste = new Prisma.Decimal("1.50");
+      co2 = new Prisma.Decimal("12.00");
+      water = new Prisma.Decimal("300.00");
+    } else if (slug === "books") {
+      ewaste = new Prisma.Decimal("0.00");
+      co2 = new Prisma.Decimal("2.00");
+      water = new Prisma.Decimal("50.00");
+    }
+
+    let action: SustainabilityAction = SustainabilityAction.ITEM_REUSED;
+    if (transaction.transactionType === TransactionType.DONATION) {
+      action = SustainabilityAction.ITEM_DONATED;
+    } else if (transaction.transactionType === TransactionType.EXCHANGE) {
+      action = SustainabilityAction.EXCHANGE_COMPLETED;
+    } else if (transaction.transactionType === TransactionType.REPAIR) {
+      action = SustainabilityAction.DEVICE_REPAIRED;
+      ewaste = new Prisma.Decimal("2.00");
+      co2 = new Prisma.Decimal("8.00");
+    }
+
+    return prisma.$transaction(async (tx) => {
+      // 1. Update transaction
+      const updatedTx = await tx.marketplaceTransaction.update({
+        where: { id },
+        data: {
+          status: TransactionStatus.COMPLETED,
+          completedAt: new Date()
+        },
+        include: {
+          listing: { include: { category: true } },
+          requester: true,
+          owner: true
+        }
+      });
+
+      // 2. Update listing status
+      await tx.listing.update({
+        where: { id: transaction.listingId },
+        data: { status: ListingStatus.COMPLETED }
+      });
+
+      // 3. Create impact events
+      await tx.sustainabilityImpactEvent.create({
+        data: {
+          userId: transaction.requesterId,
+          listingId: transaction.listingId,
+          transactionId: transaction.id,
+          action,
+          co2KgAvoided: co2,
+          ewasteKgReduced: ewaste,
+          waterLitersSaved: water,
+          moneySaved: money
+        }
+      });
+
+      await tx.sustainabilityImpactEvent.create({
+        data: {
+          userId: transaction.ownerId,
+          listingId: transaction.listingId,
+          transactionId: transaction.id,
+          action,
+          co2KgAvoided: co2,
+          ewasteKgReduced: ewaste,
+          waterLitersSaved: water,
+          moneySaved: money
+        }
+      });
+
+      // 4. Update user points & reputation
+      const pointsReward = 100;
+      
+      const newRequesterRep = DecimalMin(new Prisma.Decimal(transaction.requester.reputationScore).add("0.1"), new Prisma.Decimal("5.00"));
+      await tx.user.update({
+        where: { id: transaction.requesterId },
+        data: {
+          totalPoints: { increment: pointsReward },
+          reputationScore: newRequesterRep
+        }
+      });
+
+      const newOwnerRep = DecimalMin(new Prisma.Decimal(transaction.owner.reputationScore).add("0.1"), new Prisma.Decimal("5.00"));
+      await tx.user.update({
+        where: { id: transaction.ownerId },
+        data: {
+          totalPoints: { increment: pointsReward },
+          reputationScore: newOwnerRep
+        }
+      });
+
+      return updatedTx;
+    });
+  }
+  async listTransactions(query: { userId?: string; role?: 'owner' | 'requester' }) {
+    const where: Prisma.MarketplaceTransactionWhereInput = {};
+    if (query.userId) {
+      if (query.role === 'owner') {
+        where.ownerId = query.userId;
+      } else if (query.role === 'requester') {
+        where.requesterId = query.userId;
+      } else {
+        where.OR = [
+          { ownerId: query.userId },
+          { requesterId: query.userId }
+        ];
+      }
+    }
+
+    return prisma.marketplaceTransaction.findMany({
+      where,
+      include: {
+        listing: { include: { category: true } },
+        requester: true,
+        owner: true
+      },
+      orderBy: { createdAt: "desc" }
+    });
+  }
+}
+
+function DecimalMin(a: Prisma.Decimal, b: Prisma.Decimal): Prisma.Decimal {
+  return a.lessThan(b) ? a : b;
 }
 

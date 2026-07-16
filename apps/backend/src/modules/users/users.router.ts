@@ -18,6 +18,14 @@ usersRouter.post(
 );
 
 usersRouter.get(
+  "/leaderboard",
+  asyncHandler(async (_req, res) => {
+    const leaderboard = await usersService.getLeaderboard();
+    res.json(leaderboard);
+  })
+);
+
+usersRouter.get(
   "/:id",
   validate(idParamsSchema, "params"),
   asyncHandler(async (req, res) => {

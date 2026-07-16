@@ -9,6 +9,8 @@ import {
   idParamsSchema,
   listListingsQuerySchema,
   updateListingSchema,
+  createTransactionSchema,
+  updateTransactionStatusSchema,
   type ListListingsQuery
 } from "./marketplace.schemas.js";
 import { MarketplaceService } from "./marketplace.service.js";
@@ -91,5 +93,44 @@ marketplaceRouter.post(
     const { id } = req.params as { id: string };
     const feedback = await marketplaceService.submitFeedback(id, req.body);
     res.status(201).json(feedback);
+  })
+);
+
+marketplaceRouter.post(
+  "/transactions",
+  validate(createTransactionSchema),
+  asyncHandler(async (req, res) => {
+    const transaction = await marketplaceService.createTransaction(req.body);
+    res.status(201).json(transaction);
+  })
+);
+
+marketplaceRouter.get(
+  "/transactions",
+  asyncHandler(async (req, res) => {
+    const { userId, role } = req.query as { userId?: string; role?: 'owner' | 'requester' };
+    const transactions = await marketplaceService.listTransactions({ userId, role });
+    res.json(transactions);
+  })
+);
+
+marketplaceRouter.get(
+  "/transactions/:id",
+  validate(idParamsSchema, "params"),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params as { id: string };
+    const transaction = await marketplaceService.getTransaction(id);
+    res.json(transaction);
+  })
+);
+
+marketplaceRouter.patch(
+  "/transactions/:id/status",
+  validate(idParamsSchema, "params"),
+  validate(updateTransactionStatusSchema),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params as { id: string };
+    const transaction = await marketplaceService.updateTransactionStatus(id, req.body.status);
+    res.json(transaction);
   })
 );

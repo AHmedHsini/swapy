@@ -1,4 +1,4 @@
-import { ItemCondition, ListingStatus, ListingType } from "@prisma/client";
+import { ItemCondition, ListingStatus, ListingType, TransactionType, TransactionStatus } from "@prisma/client";
 import { z } from "zod";
 
 export const idParamsSchema = z.object({
@@ -46,9 +46,24 @@ export const createFeedbackSchema = z.object({
   comment: z.string().trim().max(1000).optional()
 });
 
+export const createTransactionSchema = z.object({
+  listingId: z.string().min(1),
+  requesterId: z.string().min(1),
+  transactionType: z.nativeEnum(TransactionType),
+  agreedPrice: z.coerce.number().nonnegative().optional(),
+  offeredListingId: z.string().min(1).optional(),
+  scheduledLocation: z.string().trim().min(2).max(160).optional()
+});
+
+export const updateTransactionStatusSchema = z.object({
+  status: z.nativeEnum(TransactionStatus)
+});
+
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>;
 export type CreateListingInput = z.infer<typeof createListingSchema>;
 export type UpdateListingInput = z.infer<typeof updateListingSchema>;
 export type ListListingsQuery = z.infer<typeof listListingsQuerySchema>;
 export type CreateFeedbackInput = z.infer<typeof createFeedbackSchema>;
+export type CreateTransactionInput = z.infer<typeof createTransactionSchema>;
+export type UpdateTransactionStatusInput = z.infer<typeof updateTransactionStatusSchema>;
 
