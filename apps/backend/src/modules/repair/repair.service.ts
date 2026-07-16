@@ -14,8 +14,8 @@ export class RepairService {
       throw new HttpError(404, "User not found");
     }
 
-    const advice = this.aiService.analyzeRepair(input.deviceName, input.problemDescription);
-    const cost = this.aiService.predictCost(input.deviceName, input.problemDescription);
+    const advice = await this.aiService.analyzeRepair(input.deviceName, input.problemDescription);
+    const cost = await this.aiService.predictCost(input.deviceName, input.problemDescription);
 
     return prisma.repairTicket.create({
       data: {

@@ -16,11 +16,11 @@ describe("Swapy Campus API", () => {
     });
   });
 
-  it("returns repair advice from the local AI adapter", () => {
+  it("returns repair advice from the local AI adapter", async () => {
     const ai = new LocalAiService();
 
-    const advice = ai.analyzeRepair("Arduino Uno", "The board is not detected by USB.");
-    const cost = ai.predictCost("Arduino Uno", "The board is not detected by USB.");
+    const advice = await ai.analyzeRepair("Arduino Uno", "The board is not detected by USB.");
+    const cost = await ai.predictCost("Arduino Uno", "The board is not detected by USB.");
 
     expect(advice.recommendation.toLowerCase()).toContain("usb");
     expect(cost.replacementCost.toString()).toBe("30");

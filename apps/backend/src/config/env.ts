@@ -10,7 +10,8 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   JWT_SECRET: z.string().min(16),
   JWT_EXPIRES_IN: z.string().default("7d"),
-  CORS_ORIGINS: z.string().default("http://localhost:5173,http://localhost:3000")
+  CORS_ORIGINS: z.string().default("http://localhost:5173,http://localhost:3000"),
+  AI_SERVICE_URL: z.string().url().default("http://127.0.0.1:8001")
 });
 
 const parsed = envSchema.parse(process.env);
@@ -23,5 +24,6 @@ export const env = {
   databaseUrl: parsed.DATABASE_URL,
   jwtSecret: parsed.JWT_SECRET,
   jwtExpiresIn: parsed.JWT_EXPIRES_IN,
-  corsOrigins: parsed.CORS_ORIGINS.split(",").map((origin) => origin.trim())
+  corsOrigins: parsed.CORS_ORIGINS.split(",").map((origin) => origin.trim()),
+  aiServiceUrl: parsed.AI_SERVICE_URL
 };

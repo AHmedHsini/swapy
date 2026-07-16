@@ -1,5 +1,7 @@
 import { Prisma } from "@prisma/client";
 
+import { env } from "../../config/env.js";
+
 export type RepairAdvice = {
   recommendation: string;
   difficulty: "low" | "medium" | "high";
@@ -13,7 +15,25 @@ export type CostPrediction = {
 };
 
 export class LocalAiService {
-  analyzeRepair(deviceName: string, problemDescription: string): RepairAdvice {
+  async analyzeRepair(deviceName: string, problemDescription: string): Promise<RepairAdvice> {
+    try {
+      const response = await fetch(`${env.aiServiceUrl}/analyze-repair`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceName, problemDescription })
+      });
+      if (response.ok) {
+        const data = (await response.json()) as any;
+        return {
+          recommendation: data.recommendation,
+          difficulty: data.difficulty,
+          safetyNotes: data.safetyNotes
+        };
+      }
+    } catch (error) {
+      console.warn("AI Service unavailable, falling back to local prediction logic.");
+    }
+
     const text = `${deviceName} ${problemDescription}`.toLowerCase();
     const steps = [
       "Document the symptoms before replacing parts.",
@@ -51,7 +71,25 @@ export class LocalAiService {
     };
   }
 
-  predictCost(deviceName: string, problemDescription: string): CostPrediction {
+  async predictCost(deviceName: string, problemDescription: string): Promise<CostPrediction> {
+    try {
+      const response = await fetch(`${env.aiServiceUrl}/predict-cost`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceName, problemDescription })
+      });
+      if (response.ok) {
+        const data = (await response.json()) as any;
+        return {
+          repairCost: new Prisma.Decimal(data.repairCost),
+          resaleValue: new Prisma.Decimal(data.resaleValue),
+          replacementCost: new Prisma.Decimal(data.replacementCost)
+        };
+      }
+    } catch (error) {
+      console.warn("AI Service unavailable, falling back to local cost prediction logic.");
+    }
+
     const text = `${deviceName} ${problemDescription}`.toLowerCase();
     let repairCost = new Prisma.Decimal("8.00");
     let resaleValue = new Prisma.Decimal("18.00");
@@ -79,4 +117,3 @@ export class LocalAiService {
     return { repairCost, resaleValue, replacementCost };
   }
 }
-
