@@ -5,13 +5,18 @@ import { validate } from "../../common/validate.js";
 import {
   createCategorySchema,
   createFeedbackSchema,
+  createTransactionSchema,
+  actorIdBodySchema,
   createListingSchema,
   idParamsSchema,
+  type CreateTransactionInput,
+  type ActorIdBody,
   listListingsQuerySchema,
   updateListingSchema,
   type ListListingsQuery
 } from "./marketplace.schemas.js";
 import { MarketplaceService } from "./marketplace.service.js";
+import { requireAuth, type AuthRequest } from "../../common/auth.js";
 
 export const marketplaceRouter = Router();
 const marketplaceService = new MarketplaceService();
@@ -36,8 +41,11 @@ marketplaceRouter.get(
 marketplaceRouter.post(
   "/listings",
   validate(createListingSchema),
-  asyncHandler(async (req, res) => {
-    const listing = await marketplaceService.createListing(req.body);
+  requireAuth,
+  asyncHandler(async (req: AuthRequest, res) => {
+    // Use authenticated user as listing owner
+    const body = { ...req.body, userId: req.auth!.userId };
+    const listing = await marketplaceService.createListing(body as any);
     res.status(201).json(listing);
   })
 );
@@ -87,9 +95,58 @@ marketplaceRouter.post(
   "/listings/:id/feedback",
   validate(idParamsSchema, "params"),
   validate(createFeedbackSchema),
+  requireAuth,
+  asyncHandler(async (req: AuthRequest, res) => {
+    const { id } = req.params as { id: string };
+    const feedback = await marketplaceService.submitFeedback(id, { ...req.body, reviewerId: req.auth!.userId } as any);
+    res.status(201).json(feedback);
+  })
+);
+
+// Transactions
+marketplaceRouter.post(
+  "/transactions",
+  validate(createTransactionSchema),
+  requireAuth,
+  asyncHandler(async (req: AuthRequest, res) => {
+    const input = req.body as unknown as CreateTransactionInput;
+    // override requesterId with authenticated user
+    input.requesterId = req.auth!.userId;
+    const tx = await marketplaceService.createTransaction(input);
+    res.status(201).json(tx);
+  })
+);
+
+marketplaceRouter.get(
+  "/transactions/:id",
+  validate(idParamsSchema, "params"),
   asyncHandler(async (req, res) => {
     const { id } = req.params as { id: string };
-    const feedback = await marketplaceService.submitFeedback(id, req.body);
-    res.status(201).json(feedback);
+    const tx = await marketplaceService.getTransaction(id);
+    res.json(tx);
+  })
+);
+
+marketplaceRouter.patch(
+  "/transactions/:id/accept",
+  validate(idParamsSchema, "params"),
+  requireAuth,
+  asyncHandler(async (req: AuthRequest, res) => {
+    const { id } = req.params as { id: string };
+    const actorId = req.auth!.userId;
+    const tx = await marketplaceService.acceptTransaction(id, actorId);
+    res.json(tx);
+  })
+);
+
+marketplaceRouter.patch(
+  "/transactions/:id/complete",
+  validate(idParamsSchema, "params"),
+  requireAuth,
+  asyncHandler(async (req: AuthRequest, res) => {
+    const { id } = req.params as { id: string };
+    const actorId = req.auth!.userId;
+    const tx = await marketplaceService.completeTransaction(id, actorId);
+    res.json(tx);
   })
 );

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
+import FeedbackModal from './components/FeedbackModal';
+import UserProfile from './components/UserProfile';
 
 // Types
 interface Category {
@@ -141,6 +143,8 @@ function App() {
     { id: 'u3', firstName: 'Emma', lastName: 'Watson', reputationScore: 4.70, totalPoints: 780, riskLevel: 'LOW', completedTransactions: 14 },
     { id: 'u4', firstName: 'Michael', lastName: 'Scott', reputationScore: 4.10, totalPoints: 340, riskLevel: 'MEDIUM', completedTransactions: 5 }
   ]);
+
+  const [feedbackModalListingId, setFeedbackModalListingId] = useState<string | null>(null);
 
   // Form states
   const [newListing, setNewListing] = useState({
@@ -336,6 +340,50 @@ function App() {
     setNewTicket({ deviceName: '', problemDescription: '' });
   };
 
+  // Transaction actions (minimal integration)
+  const handleRequestTransaction = async (listingId: string) => {
+    try {
+      const res = await fetch('/api/marketplace/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ listingId, requesterId: 'u1', transactionType: 'SALE' })
+      });
+      if (res.ok) {
+        alert('Transaction requested');
+      } else {
+        alert('Failed to request transaction (backend may be offline)');
+      }
+    } catch (e) {
+      alert('Failed to request transaction');
+    }
+  };
+
+  const handleAcceptTransaction = async (txId: string) => {
+    try {
+      const res = await fetch(`/api/marketplace/transactions/${txId}/accept`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actorId: 'u1' })
+      });
+      if (res.ok) alert('Transaction accepted'); else alert('Accept failed');
+    } catch (e) { alert('Accept failed'); }
+  };
+
+  const handleCompleteTransaction = async (txId: string) => {
+    try {
+      const res = await fetch(`/api/marketplace/transactions/${txId}/complete`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actorId: 'u1' })
+      });
+      if (res.ok) alert('Transaction completed'); else alert('Complete failed');
+    } catch (e) { alert('Complete failed'); }
+  };
+
+  const handleSubmitFeedback = (listingId: string) => {
+    setFeedbackModalListingId(listingId);
+  };
+
   return (
     <div className="dashboard-container">
       {/* Header */}
@@ -377,8 +425,7 @@ function App() {
             <span role="img" aria-label="eco">🌱</span> 1,250 Pts
           </div>
           <div className="user-profile">
-            <div className="user-avatar">SC</div>
-            <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Sarah Chen</span>
+            <UserProfile userId={'u1'} />
           </div>
         </div>
       </header>
@@ -541,6 +588,10 @@ function App() {
                             {item.listingType === 'DONATION' ? 'FREE' : item.listingType === 'EXCHANGE' ? 'Trade' : `$${item.price}`}
                           </span>
                           <span className="listing-condition">{item.condition.replace('_', ' ')}</span>
+                        </div>
+                        <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem' }}>
+                          <button className="btn-small" onClick={() => handleRequestTransaction(item.id)}>Request</button>
+                          <button className="btn-small muted" onClick={() => handleSubmitFeedback(item.id)}>Feedback</button>
                         </div>
                       </div>
                     </div>
@@ -718,6 +769,13 @@ function App() {
       </main>
 
       {/* Footer */}
+      {feedbackModalListingId && (
+        <FeedbackModal
+          listingId={feedbackModalListingId}
+          onClose={() => setFeedbackModalListingId(null)}
+          onSubmitted={() => { /* could refresh listings or trust info */ }}
+        />
+      )}
       <footer className="dashboard-footer">
         <p>&copy; {new Date().getFullYear()} Swapy Campus Circular Monorepo. All rights reserved.</p>
       </footer>

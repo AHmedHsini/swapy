@@ -5,6 +5,18 @@ import { createApp } from "../src/app.js";
 import { LocalAiService } from "../src/modules/ai/local-ai.service.js";
 
 describe("Swapy Campus API", () => {
+  it("exposes a root endpoint", async () => {
+    const app = createApp();
+
+    const response = await request(app).get("/").expect(200);
+
+    expect(response.body).toMatchObject({
+      status: "ok",
+      apiBasePath: "/api",
+      healthCheck: "/api/health"
+    });
+  });
+
   it("exposes a health endpoint", async () => {
     const app = createApp();
 

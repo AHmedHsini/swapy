@@ -632,3 +632,37 @@
   font-size: 0.85rem;
   margin-top: auto;
 }
+
+/* Modal */
+.modal-backdrop {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+}
+.modal-panel {
+  background: #0b0b0c;
+  border: 1px solid #27272a;
+  padding: 1.25rem;
+  border-radius: 0.6rem;
+  width: 420px;
+  color: #e5e7eb;
+}
+.modal-panel h3 { margin: 0 0 0.5rem 0; }
+.modal-panel label { display:block; font-size:0.85rem; margin-bottom:0.25rem; }
+.modal-panel textarea, .modal-panel select { width:100%; padding:0.5rem; border-radius:0.35rem; background:#0f0f10; border:1px solid #27272a; color:#e5e7eb }
+.form-error { color: #ff7b7b; margin-top:0.5rem }
+
+/* Trust badge */
+.trust-badge { padding: 0.25rem 0.5rem; border-radius: 0.5rem; font-weight:700; font-size:0.78rem }
+.trust-badge.platinum { background: linear-gradient(90deg,#0ea5a4,#60a5fa); color:white }
+.trust-badge.gold { background:#f59e0b; color:#121212 }
+.trust-badge.silver { background:#9ca3af; color:#121212 }
+.trust-badge.bronze { background:#d97706; color:#121212 }
+.trust-badge.unknown { background:#374151; color:#e5e7eb }

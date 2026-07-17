@@ -18,6 +18,15 @@ export function createApp() {
     app.use(morgan("dev"));
   }
 
+  app.get("/", (_req, res) => {
+    res.json({
+      status: "ok",
+      service: env.appName,
+      apiBasePath: "/api",
+      healthCheck: "/api/health"
+    });
+  });
+
   app.use("/api", routes);
 
   app.use((_req, _res, next) => {

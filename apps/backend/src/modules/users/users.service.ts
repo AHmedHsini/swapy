@@ -28,12 +28,42 @@ export class UsersService {
     return toPublicUser(user);
   }
 
-  async getById(id: string) {
+  async getById(id: string, requesterId?: string) {
     const user = await prisma.user.findUnique({ where: { id } });
     if (!user) {
       throw new HttpError(404, "User not found");
     }
-    return toPublicUser(user);
+
+    const snapshot = await prisma.trustScoreSnapshot.findFirst({ where: { userId: id }, orderBy: { createdAt: "desc" } });
+
+    const publicUser = toPublicUser(user) as any;
+    publicUser.trust = snapshot
+      ? {
+          score: Number(snapshot.score.toString()),
+          riskLevel: snapshot.riskLevel,
+          completedTransactions: snapshot.completedTransactions,
+          averageRating: snapshot.averageRating ? Number(snapshot.averageRating.toString()) : null,
+          reportedIssues: snapshot.reportedIssues,
+          modelVersion: snapshot.modelVersion,
+          createdAt: snapshot.createdAt
+        }
+      : null;
+
+    // Optionally include whether the requester has an active transaction with this user
+    if (requesterId) {
+      const activeTx = await prisma.marketplaceTransaction.findFirst({
+        where: {
+          OR: [
+            { requesterId: requesterId, ownerId: id },
+            { requesterId: id, ownerId: requesterId }
+          ],
+          status: { not: "CANCELLED" }
+        }
+      });
+      publicUser.hasActiveTransactionWithRequester = Boolean(activeTx);
+    }
+
+    return publicUser;
   }
 
   async update(id: string, input: UpdateUserInput) {

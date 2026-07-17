@@ -4,6 +4,7 @@ import { asyncHandler } from "../../common/async-handler.js";
 import { validate } from "../../common/validate.js";
 import { idParamsSchema, registerUserSchema, updateUserSchema } from "./users.schemas.js";
 import { UsersService } from "./users.service.js";
+import { requireAuth, type AuthRequest } from "../../common/auth.js";
 
 export const usersRouter = Router();
 const usersService = new UsersService();
@@ -20,9 +21,10 @@ usersRouter.post(
 usersRouter.get(
   "/:id",
   validate(idParamsSchema, "params"),
-  asyncHandler(async (req, res) => {
+  requireAuth,
+  asyncHandler(async (req: AuthRequest, res) => {
     const { id } = req.params as { id: string };
-    const user = await usersService.getById(id);
+    const user = await usersService.getById(id, req.auth!.userId);
     res.json(user);
   })
 );
