@@ -3,7 +3,7 @@ import { RepairTicketStatus } from "@prisma/client";
 import { HttpError } from "../../common/http-error.js";
 import { prisma } from "../../config/prisma.js";
 import { LocalAiService } from "../ai/local-ai.service.js";
-import type { SubmitRepairTicketInput } from "./repair.schemas.js";
+import type { ListRepairTicketsQuery, SubmitRepairTicketInput } from "./repair.schemas.js";
 
 export class RepairService {
   constructor(private readonly aiService = new LocalAiService()) {}
@@ -41,6 +41,26 @@ export class RepairService {
       throw new HttpError(404, "Repair ticket not found");
     }
     return ticket;
+  }
+
+  async listTickets(query: ListRepairTicketsQuery) {
+    const where: Record<string, string> = {};
+    if (query.userId) where.userId = query.userId;
+    if (query.status) where.status = query.status;
+
+    return prisma.repairTicket.findMany({
+      where,
+      include: { user: true },
+      orderBy: { createdAt: "desc" }
+    });
+  }
+
+  async cancelTicket(id: string) {
+    await this.getTicket(id);
+    return prisma.repairTicket.update({
+      where: { id },
+      data: { status: RepairTicketStatus.CANCELLED }
+    });
   }
 
   async updateStatus(id: string, status: RepairTicketStatus) {
