@@ -22,6 +22,7 @@ interface Listing {
 
 interface RepairTicket {
   id: string;
+  userId: string;
   deviceName: string;
   problemDescription: string;
   aiRecommendation: string;
@@ -30,6 +31,7 @@ interface RepairTicket {
   estimatedResaleValue: number;
   estimatedReplacementCost: number;
   status: string;
+  createdAt: string;
 }
 
 interface Leader {
@@ -113,6 +115,7 @@ function App() {
   const [repairTickets, setRepairTickets] = useState<RepairTicket[]>([
     {
       id: 't1',
+      userId: 'u1',
       deviceName: 'Logitech MX Master 3',
       problemDescription: 'The scroll wheel button is stuck and clicking noise is loud.',
       aiRecommendation: 'Clean dust and inspect the mechanical spring latch under the wheel. Safety: Disconnect USB battery before opening.',
@@ -120,10 +123,12 @@ function App() {
       estimatedRepairCost: 8.0,
       estimatedResaleValue: 45.0,
       estimatedReplacementCost: 99.0,
-      status: 'AI_RECOMMENDED'
+      status: 'AI_RECOMMENDED',
+      createdAt: new Date().toISOString()
     },
     {
       id: 't2',
+      userId: 'u1',
       deviceName: 'MacBook Air 2020 M1',
       problemDescription: 'The laptop runs extremely hot and the fan is constantly spinning loudly.',
       aiRecommendation: 'Clean dust from vents while the device is powered off. Check whether fan noise changes under load. Safety: Avoid puncturing battery.',
@@ -131,7 +136,8 @@ function App() {
       estimatedRepairCost: 35.0,
       estimatedResaleValue: 380.0,
       estimatedReplacementCost: 899.0,
-      status: 'OPEN'
+      status: 'OPEN',
+      createdAt: new Date().toISOString()
     }
   ]);
 
@@ -187,6 +193,12 @@ function App() {
       if (resListings.ok) {
         const data = await resListings.json();
         if (data.length > 0) setListings(data);
+      }
+
+      const resTickets = await fetch('/api/repair/tickets');
+      if (resTickets.ok) {
+        const data = await resTickets.json();
+        if (data.length > 0) setRepairTickets(data);
       }
     } catch (e) {
       console.log("Backend offline or unreachable. Using premium mock data fallback.");
@@ -319,6 +331,7 @@ function App() {
 
       const ticket: RepairTicket = {
         id: 't_' + Date.now(),
+        userId: 'u1',
         deviceName: newTicket.deviceName,
         problemDescription: newTicket.problemDescription,
         aiRecommendation: recommendation,
@@ -326,7 +339,8 @@ function App() {
         estimatedRepairCost: cost,
         estimatedResaleValue: resale,
         estimatedReplacementCost: replacement,
-        status: 'AI_RECOMMENDED'
+        status: 'AI_RECOMMENDED',
+        createdAt: new Date().toISOString()
       };
 
       setRepairTickets([ticket, ...repairTickets]);
@@ -334,6 +348,34 @@ function App() {
 
     // Reset Form
     setNewTicket({ deviceName: '', problemDescription: '' });
+  };
+
+  // Cancel Repair Ticket
+  const handleCancelTicket = async (id: string) => {
+    try {
+      const response = await fetch(`/api/repair/tickets/${id}`, { method: 'DELETE' });
+      if (response.ok) {
+        setRepairTickets(prev => prev.map(t => t.id === id ? { ...t, status: 'CANCELLED' } : t));
+      }
+    } catch (error) {
+      setRepairTickets(prev => prev.map(t => t.id === id ? { ...t, status: 'CANCELLED' } : t));
+    }
+  };
+
+  // Update Repair Ticket Status
+  const handleUpdateStatus = async (id: string, status: string) => {
+    try {
+      const response = await fetch(`/api/repair/tickets/${id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      if (response.ok) {
+        setRepairTickets(prev => prev.map(t => t.id === id ? { ...t, status } : t));
+      }
+    } catch (error) {
+      setRepairTickets(prev => prev.map(t => t.id === id ? { ...t, status } : t));
+    }
   };
 
   return (
@@ -612,6 +654,34 @@ function App() {
                             </div>
                             <p>{ticket.aiRecommendation}</p>
                           </div>
+                        )}
+
+                        <div className="ticket-actions">
+                          {ticket.status !== 'CANCELLED' && ticket.status !== 'RESOLVED' && (
+                            <select
+                              className="status-select"
+                              value={ticket.status}
+                              onChange={e => handleUpdateStatus(ticket.id, e.target.value)}
+                            >
+                              <option value="OPEN">Open</option>
+                              <option value="AI_RECOMMENDED">AI Recommended</option>
+                              <option value="IN_PROGRESS">In Progress</option>
+                              <option value="RESOLVED">Resolved</option>
+                            </select>
+                          )}
+                          {ticket.status !== 'CANCELLED' && ticket.status !== 'RESOLVED' && (
+                            <button
+                              className="cancel-btn"
+                              onClick={() => handleCancelTicket(ticket.id)}
+                            >
+                              Cancel
+                            </button>
+                          )}
+                        </div>
+                        {ticket.createdAt && (
+                          <p className="ticket-date">
+                            Created: {new Date(ticket.createdAt).toLocaleDateString()}
+                          </p>
                         )}
                       </div>
 
