@@ -11,6 +11,7 @@
     "build:frontend": "pnpm --filter swapy-campus-frontend build",
     "test": "pnpm --recursive test",
     "test:backend": "pnpm --filter swapy-campus-api test",
+    "db:seed:demo-users": "pnpm --filter swapy-campus-api db:seed:demo-users",
     "prisma:generate": "pnpm --filter swapy-campus-api prisma:generate",
     "prisma:migrate": "pnpm --filter swapy-campus-api prisma:migrate",
     "prisma:studio": "pnpm --filter swapy-campus-api prisma:studio"
